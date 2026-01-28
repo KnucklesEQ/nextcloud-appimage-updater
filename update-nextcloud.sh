@@ -212,16 +212,18 @@ asset_url="$(jq -r --arg arch "$arch" '
 tag_version="${tag_name#v}"
 
 current_target=""
-current_version=""
+current_base=""
 if [[ -L "$SYMLINK" ]]; then
   current_target="$(readlink -f "$SYMLINK" || true)"
   current_name="$(basename "$current_target")"
-  if [[ "$current_name" =~ ^Nextcloud-(.+)-${arch}\.AppImage$ ]]; then
-    current_version="${BASH_REMATCH[1]}"
-  fi
+  case "$current_name" in
+    *.AppImage|*.appimage)
+      current_base="${current_name%.*}"
+      ;;
+  esac
 fi
 
-if [[ -n "$current_version" && "$current_version" == "$tag_version" ]]; then
+if [[ -n "$current_base" && "$current_base" == *"$tag_version"* ]]; then
   log "Already up to date: $tag_version"
   exit 0
 fi
@@ -254,7 +256,7 @@ if [[ -n "$current_target" && -f "$current_target" ]]; then
 fi
 
 removed_any=0
-for f in "${RELEASES_DIR}"/Nextcloud-*.AppImage; do
+for f in "${RELEASES_DIR}"/*.AppImage "${RELEASES_DIR}"/*.appimage; do
   [[ -e "$f" ]] || continue
   if [[ "$f" == "$keep_new" ]]; then
     continue
@@ -265,7 +267,7 @@ for f in "${RELEASES_DIR}"/Nextcloud-*.AppImage; do
   fi
   rm -f -- "$f"
   removed_any=1
-  log "Removed old version: $f"
+  log "Removed old AppImage: $f"
 done
 
 log "Installed version: $tag_version"
