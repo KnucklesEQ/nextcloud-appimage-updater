@@ -2,9 +2,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_PATH="${SCRIPT_DIR}/${SCRIPT_NAME}"
 CONFIG_FILE="${SCRIPT_DIR}/nextcloud-updater.conf"
+APP_NAME="Nextcloud_Files"
+SYMLINK_NAME="Nextcloud.AppImage"
 BASE_DIR=""
+APP_DIR=""
+RELEASES_DIR=""
 SYMLINK=""
+tmp_path=""
 API_URL="https://api.github.com/repos/nextcloud-releases/desktop/releases/latest"
 
 log() {
@@ -40,7 +47,7 @@ read_config() {
 prompt_for_base_dir() {
   local input=""
   while true; do
-    printf 'Carpeta para guardar AppImages [%s]: ' "$BASE_DIR"
+    printf 'Carpeta raiz para apps [%s]: ' "$BASE_DIR"
     read -r input
     if [[ -z "$input" ]]; then
       input="$BASE_DIR"
@@ -53,13 +60,73 @@ prompt_for_base_dir() {
   done
 }
 
+confirm_prompt() {
+  local message="$1"
+  local answer=""
+  local answer_lower=""
+  printf '%s [S/n]: ' "$message"
+  read -r answer
+  if [[ -z "$answer" ]]; then
+    return 0
+  fi
+  answer_lower="${answer,,}"
+  case "$answer_lower" in
+    s|si|y|yes)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+ensure_directories() {
+  if [[ ! -d "$APP_DIR" ]]; then
+    mkdir -p -- "$APP_DIR" || die "No se pudo crear la carpeta: $APP_DIR"
+  fi
+  if [[ ! -d "$RELEASES_DIR" ]]; then
+    mkdir -p -- "$RELEASES_DIR" || die "No se pudo crear la carpeta: $RELEASES_DIR"
+  fi
+}
+
+relocate_script() {
+  local target_script="${APP_DIR}/${SCRIPT_NAME}"
+  local target_config="${APP_DIR}/nextcloud-updater.conf"
+  if [[ "$SCRIPT_DIR" == "$APP_DIR" ]]; then
+    return 0
+  fi
+  if ! confirm_prompt "Quieres mover el script y la configuracion a $APP_DIR?"; then
+    return 0
+  fi
+  cp -f -- "$SCRIPT_PATH" "$target_script" || die "No se pudo copiar el script a: $target_script"
+  if [[ -f "$CONFIG_FILE" && "$CONFIG_FILE" != "$target_config" ]]; then
+    cp -f -- "$CONFIG_FILE" "$target_config" || die "No se pudo copiar la configuracion a: $target_config"
+  fi
+  rm -f -- "$SCRIPT_PATH" || die "No se pudo eliminar el script original: $SCRIPT_PATH"
+  if [[ -f "$CONFIG_FILE" && "$CONFIG_FILE" != "$target_config" ]]; then
+    rm -f -- "$CONFIG_FILE" || die "No se pudo eliminar la configuracion original: $CONFIG_FILE"
+  fi
+  log "Script movido a: $target_script"
+}
+
 if ! read_config; then
-  BASE_DIR="$SCRIPT_DIR"
+  if [[ "$(basename "$SCRIPT_DIR")" == "$APP_NAME" ]]; then
+    BASE_DIR="$(dirname "$SCRIPT_DIR")"
+  else
+    BASE_DIR="$SCRIPT_DIR"
+  fi
   prompt_for_base_dir
+  APP_DIR="${BASE_DIR}/${APP_NAME}"
+  RELEASES_DIR="${APP_DIR}/releases"
+  ensure_directories
   write_config
+else
+  APP_DIR="${BASE_DIR}/${APP_NAME}"
+  RELEASES_DIR="${APP_DIR}/releases"
+  ensure_directories
 fi
 
-SYMLINK="${BASE_DIR}/Nextcloud_Files"
+SYMLINK="${APP_DIR}/${SYMLINK_NAME}"
 
 arch="$(uname -m)"
 case "$arch" in
@@ -107,7 +174,7 @@ if [[ -n "$current_version" && "$current_version" == "$tag_version" ]]; then
   exit 0
 fi
 
-download_path="${BASE_DIR}/${asset_name}"
+download_path="${RELEASES_DIR}/${asset_name}"
 tmp_path="${download_path}.part"
 
 cleanup() {
@@ -135,7 +202,7 @@ if [[ -n "$current_target" && -f "$current_target" ]]; then
 fi
 
 removed_any=0
-for f in "${BASE_DIR}"/Nextcloud-*.AppImage; do
+for f in "${RELEASES_DIR}"/Nextcloud-*.AppImage; do
   [[ -e "$f" ]] || continue
   if [[ "$f" == "$keep_new" ]]; then
     continue
@@ -154,3 +221,5 @@ log "Symlink target: $(readlink -f "$SYMLINK")"
 if [[ "$removed_any" -eq 0 ]]; then
   log "No old versions removed"
 fi
+
+relocate_script
