@@ -7,12 +7,15 @@ SCRIPT_PATH="${SCRIPT_DIR}/${SCRIPT_NAME}"
 CONFIG_FILE="${SCRIPT_DIR}/nextcloud-updater.conf"
 APP_NAME="Nextcloud_Files"
 SYMLINK_NAME="Nextcloud.AppImage"
+DEFAULT_REPO_SLUG="nextcloud-releases/desktop"
+REPO_SLUG=""
+CONFIG_NEEDS_WRITE=0
 BASE_DIR=""
 APP_DIR=""
 RELEASES_DIR=""
 SYMLINK=""
 tmp_path=""
-API_URL="https://api.github.com/repos/nextcloud-releases/desktop/releases/latest"
+API_URL=""
 
 log() {
   printf '%s\n' "$*"
@@ -29,6 +32,39 @@ done
 
 write_config() {
   printf 'BASE_DIR="%s"\n' "$BASE_DIR" >"$CONFIG_FILE" || die "Unable to write config: $CONFIG_FILE"
+  printf 'REPO_SLUG="%s"\n' "$REPO_SLUG" >>"$CONFIG_FILE" || die "Unable to write config: $CONFIG_FILE"
+}
+
+normalize_repo_slug() {
+  local input="$1"
+  local cleaned=""
+  cleaned="${input%/}"
+  if [[ "$cleaned" =~ ^https://github\.com/([^/]+/[^/]+)/releases/.*$ ]]; then
+    cleaned="${BASH_REMATCH[1]}"
+  fi
+  cleaned="${cleaned%.git}"
+  if [[ "$cleaned" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    printf '%s' "$cleaned"
+    return 0
+  fi
+  return 1
+}
+
+prompt_for_repo_slug() {
+  local input=""
+  local normalized=""
+  while true; do
+    printf 'GitHub repo (owner/repo or download URL) [%s]: ' "$DEFAULT_REPO_SLUG"
+    read -r input
+    if [[ -z "$input" ]]; then
+      input="$DEFAULT_REPO_SLUG"
+    fi
+    if normalized="$(normalize_repo_slug "$input")"; then
+      REPO_SLUG="$normalized"
+      break
+    fi
+    log "Invalid repository. Use owner/repo or a GitHub download URL like: https://github.com/owner/repo/releases/download/tag/file.AppImage"
+  done
 }
 
 read_config() {
@@ -40,6 +76,17 @@ read_config() {
   fi
   if [[ ! -d "$BASE_DIR" ]]; then
     die "Configured directory not found: $BASE_DIR"
+  fi
+  if [[ -n "${REPO_SLUG:-}" ]]; then
+    if ! REPO_SLUG="$(normalize_repo_slug "$REPO_SLUG")"; then
+      die "Invalid config: REPO_SLUG must be owner/repo or a GitHub download URL"
+    fi
+  else
+    prompt_for_repo_slug
+    CONFIG_NEEDS_WRITE=1
+  fi
+  if [[ -z "$REPO_SLUG" ]]; then
+    die "Repository is required to continue"
   fi
   return 0
 }
@@ -116,6 +163,7 @@ if ! read_config; then
     BASE_DIR="$SCRIPT_DIR"
   fi
   prompt_for_base_dir
+  prompt_for_repo_slug
   APP_DIR="${BASE_DIR}/${APP_NAME}"
   RELEASES_DIR="${APP_DIR}/releases"
   ensure_directories
@@ -124,9 +172,13 @@ else
   APP_DIR="${BASE_DIR}/${APP_NAME}"
   RELEASES_DIR="${APP_DIR}/releases"
   ensure_directories
+  if [[ "$CONFIG_NEEDS_WRITE" -eq 1 ]]; then
+    write_config
+  fi
 fi
 
 SYMLINK="${APP_DIR}/${SYMLINK_NAME}"
+API_URL="https://api.github.com/repos/${REPO_SLUG}/releases/latest"
 
 arch="$(uname -m)"
 case "$arch" in
