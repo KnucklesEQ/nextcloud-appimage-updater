@@ -28,7 +28,7 @@ for cmd in curl jq uname readlink; do
 done
 
 write_config() {
-  printf 'BASE_DIR="%s"\n' "$BASE_DIR" >"$CONFIG_FILE" || die "No se pudo escribir la configuracion: $CONFIG_FILE"
+  printf 'BASE_DIR="%s"\n' "$BASE_DIR" >"$CONFIG_FILE" || die "Unable to write config: $CONFIG_FILE"
 }
 
 read_config() {
@@ -36,10 +36,10 @@ read_config() {
   # shellcheck source=/dev/null
   source "$CONFIG_FILE"
   if [[ -z "${BASE_DIR:-}" ]]; then
-    die "Configuracion invalida: BASE_DIR no esta definido en $CONFIG_FILE"
+    die "Invalid config: BASE_DIR is not set in $CONFIG_FILE"
   fi
   if [[ ! -d "$BASE_DIR" ]]; then
-    die "La carpeta configurada no existe: $BASE_DIR"
+    die "Configured directory not found: $BASE_DIR"
   fi
   return 0
 }
@@ -47,7 +47,7 @@ read_config() {
 prompt_for_base_dir() {
   local input=""
   while true; do
-    printf 'Carpeta raiz para apps [%s]: ' "$BASE_DIR"
+    printf 'Apps base directory [%s]: ' "$BASE_DIR"
     read -r input
     if [[ -z "$input" ]]; then
       input="$BASE_DIR"
@@ -56,7 +56,7 @@ prompt_for_base_dir() {
       BASE_DIR="$input"
       break
     fi
-    log "Ruta no valida. Introduce una carpeta existente, por ejemplo: /home/usuario/Aplicaciones."
+    log "Invalid path. Enter an existing directory, for example: /home/user/Applications."
   done
 }
 
@@ -64,7 +64,7 @@ confirm_prompt() {
   local message="$1"
   local answer=""
   local answer_lower=""
-  printf '%s [S/n]: ' "$message"
+  printf '%s [Y/n]: ' "$message"
   read -r answer
   if [[ -z "$answer" ]]; then
     return 0
@@ -82,10 +82,10 @@ confirm_prompt() {
 
 ensure_directories() {
   if [[ ! -d "$APP_DIR" ]]; then
-    mkdir -p -- "$APP_DIR" || die "No se pudo crear la carpeta: $APP_DIR"
+    mkdir -p -- "$APP_DIR" || die "Unable to create directory: $APP_DIR"
   fi
   if [[ ! -d "$RELEASES_DIR" ]]; then
-    mkdir -p -- "$RELEASES_DIR" || die "No se pudo crear la carpeta: $RELEASES_DIR"
+    mkdir -p -- "$RELEASES_DIR" || die "Unable to create directory: $RELEASES_DIR"
   fi
 }
 
@@ -95,18 +95,18 @@ relocate_script() {
   if [[ "$SCRIPT_DIR" == "$APP_DIR" ]]; then
     return 0
   fi
-  if ! confirm_prompt "Quieres mover el script y la configuracion a $APP_DIR?"; then
+  if ! confirm_prompt "Move script and config to $APP_DIR?"; then
     return 0
   fi
-  cp -f -- "$SCRIPT_PATH" "$target_script" || die "No se pudo copiar el script a: $target_script"
+  cp -f -- "$SCRIPT_PATH" "$target_script" || die "Unable to copy script to: $target_script"
   if [[ -f "$CONFIG_FILE" && "$CONFIG_FILE" != "$target_config" ]]; then
-    cp -f -- "$CONFIG_FILE" "$target_config" || die "No se pudo copiar la configuracion a: $target_config"
+    cp -f -- "$CONFIG_FILE" "$target_config" || die "Unable to copy config to: $target_config"
   fi
-  rm -f -- "$SCRIPT_PATH" || die "No se pudo eliminar el script original: $SCRIPT_PATH"
+  rm -f -- "$SCRIPT_PATH" || die "Unable to remove original script: $SCRIPT_PATH"
   if [[ -f "$CONFIG_FILE" && "$CONFIG_FILE" != "$target_config" ]]; then
-    rm -f -- "$CONFIG_FILE" || die "No se pudo eliminar la configuracion original: $CONFIG_FILE"
+    rm -f -- "$CONFIG_FILE" || die "Unable to remove original config: $CONFIG_FILE"
   fi
-  log "Script movido a: $target_script"
+  log "Script moved to: $target_script"
 }
 
 if ! read_config; then
