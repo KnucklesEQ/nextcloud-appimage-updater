@@ -26,6 +26,51 @@ die() {
   exit 1
 }
 
+show_help() {
+  cat <<EOF
+Usage: ${SCRIPT_NAME} [OPTIONS]
+
+Automated updater for Nextcloud AppImage (and other GitHub AppImages).
+Downloads the latest release from GitHub, updates the symlink, and
+keeps the previous version as a backup.
+
+Options:
+  -h, --help    Show this help message and exit.
+
+Configuration:
+  File: <base dir>/${APP_NAME}/nextcloud-updater.conf
+  Default repo: ${DEFAULT_REPO_SLUG}
+  Default base directory is the script directory when config is missing.
+
+  If the config file does not exist, the script will prompt for the
+  base directory and repository and create it automatically.
+
+  Repository input can be owner/repo or a GitHub download URL.
+
+Directory layout:
+  Base Dir/
+  └── ${APP_NAME}/
+      ├── ${SCRIPT_NAME}
+      ├── nextcloud-updater.conf
+      ├── ${SYMLINK_NAME} -> releases/Nextcloud-vX.Y.Z.AppImage
+      └── releases/
+          ├── Nextcloud-vX.Y.Z.AppImage (current)
+          └── Nextcloud-vX.Y.Y.AppImage (previous backup)
+
+Dependencies:
+  curl, jq, uname, readlink
+EOF
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help)
+      show_help
+      exit 0
+      ;;
+  esac
+done
+
 for cmd in curl jq uname readlink; do
   command -v "$cmd" >/dev/null 2>&1 || die "Missing dependency: $cmd"
 done
