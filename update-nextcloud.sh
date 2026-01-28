@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_DIR="${HOME}/Aplicaciones"
-SYMLINK="${BASE_DIR}/Nextcloud_Files"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/nextcloud-updater.conf"
+BASE_DIR=""
+SYMLINK=""
 API_URL="https://api.github.com/repos/nextcloud-releases/desktop/releases/latest"
 
 log() {
@@ -18,7 +20,46 @@ for cmd in curl jq uname readlink; do
   command -v "$cmd" >/dev/null 2>&1 || die "Missing dependency: $cmd"
 done
 
-[[ -d "$BASE_DIR" ]] || die "Base directory not found: $BASE_DIR"
+write_config() {
+  printf 'BASE_DIR="%s"\n' "$BASE_DIR" >"$CONFIG_FILE" || die "No se pudo escribir la configuracion: $CONFIG_FILE"
+}
+
+read_config() {
+  [[ -f "$CONFIG_FILE" ]] || return 1
+  # shellcheck source=/dev/null
+  source "$CONFIG_FILE"
+  if [[ -z "${BASE_DIR:-}" ]]; then
+    die "Configuracion invalida: BASE_DIR no esta definido en $CONFIG_FILE"
+  fi
+  if [[ ! -d "$BASE_DIR" ]]; then
+    die "La carpeta configurada no existe: $BASE_DIR"
+  fi
+  return 0
+}
+
+prompt_for_base_dir() {
+  local input=""
+  while true; do
+    printf 'Carpeta para guardar AppImages [%s]: ' "$BASE_DIR"
+    read -r input
+    if [[ -z "$input" ]]; then
+      input="$BASE_DIR"
+    fi
+    if [[ -d "$input" ]]; then
+      BASE_DIR="$input"
+      break
+    fi
+    log "Ruta no valida. Introduce una carpeta existente, por ejemplo: /home/usuario/Aplicaciones."
+  done
+}
+
+if ! read_config; then
+  BASE_DIR="$SCRIPT_DIR"
+  prompt_for_base_dir
+  write_config
+fi
+
+SYMLINK="${BASE_DIR}/Nextcloud_Files"
 
 arch="$(uname -m)"
 case "$arch" in
